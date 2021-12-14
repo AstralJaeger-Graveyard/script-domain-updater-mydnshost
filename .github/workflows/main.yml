@@ -1,0 +1,67 @@
+name: build
+
+# Run Workflow manually or on push to master
+on:
+  push:
+    tags:
+      - 'rc-*'
+  workflow_dispatch:
+
+# A workflow run is made up of one or more jobs that can run sequentially or in parallel
+jobs:
+  # This workflow contains a single job called "build"
+  build:
+    # The type of runner that the job will run on
+    runs-on: ${{ matrix.os }}
+    strategy: 
+      matrix:
+         os: [ ubuntu-18.04, ubuntu-20.04, macos-11, windows-2022 ]
+         python-version: ['3.9']
+        
+    steps:
+      # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
+      - uses: actions/checkout@v2
+        name: Checkout commit
+      
+      # Install Python
+      - uses: actions/setup-python@v2
+        name: Setup Python
+        with: 
+          python-version: ${{ matrix.python-version }}
+          architecture: 'x64'
+
+      # Display the version for the sake of it
+      - name: Display Python version
+        run: python -c "import sys; print(sys.version)"
+
+      # Install all necessary requirements from requirements.txt
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      # Build the application with pyinstaller (results go in dist/main/)
+      - name: Build application
+        run: pyinstaller main.py -F
+
+      # Create a Zip file from the installer package
+      - name: Create zip
+        uses: thedoctor0/zip-release@master
+        with: 
+          type: 'zip'
+          filename: release-${{ matrix.os }}-py${{ matrix.python-version }}.zip
+          path: 'dist/'
+
+      # Add package to archive so we can inspect it
+      - name: Archive artifact
+        uses: actions/upload-artifact@v2
+        with: 
+          name: release-${{ matrix.os }}-py${{ matrix.python-version }}
+          path: .
+
+      # Publish as release
+      - name: Publish release
+        uses: ncipollo/release-action@v1
+        with:
+          artifacts: release-*.zip
+          artifactContentType: application/zip
+          token: ${{ secrets.GITHUB_TOKEN }}
+          allowUpdates: true
